@@ -141,6 +141,7 @@ int main(int argc, char** argv) {
     int res;
     if(isCorrectNumOfArgs(argc-1)){
         res = getFilesRatio(argv[1],argv[2]);
+        //remove this before handing the assignments.
         if(res == IDENTICAL) {
             printf("files are identical\n");
         } else if (res == SIMILAR) {
