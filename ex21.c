@@ -6,8 +6,8 @@
 #include <unistd.h>
 #include <ctype.h>
 
-#define IDENTICAL 0 
-#define SIMILAR 1
+#define IDENTICAL 1 
+#define SIMILAR 3
 #define DIFF 2
 
 int isCorrectNumOfArgs(int numOfArgs) {
@@ -18,19 +18,20 @@ int isCorrectNumOfArgs(int numOfArgs) {
     return 1;
 }
 
+int isSimilar(char c1, char c2) {
+    return (c1 == toupper(c2)) || (c1 == tolower(c2)) || (isspace(c1) && isspace(c2));
+}
+
 int xOpen(const char* p, int flags) {
     int fd = open(p,flags);
     if(fd < 0) {
-        perror("after open ");
+        perror("Error in: open\n");
         exit(-1);
     }
     return fd;
 
 }
 
-int isSimilar(char c1, char c2) {
-    return (c1 == toupper(c2)) || (c1 == tolower(c2)) || (isspace(c1) && isspace(c2));
-}
 
 int xRead(int fd,int prevReadCount, char*buf){
     int bytesRead = prevReadCount;
@@ -38,7 +39,7 @@ int xRead(int fd,int prevReadCount, char*buf){
         if(bytesRead) {
             bytesRead = read(fd,buf,sizeof(char)); 
             if(bytesRead < 0) {
-                perror("after read ");
+                perror("Error in: read\n");
                 exit(-1);
             }
             //in case of WINDOWS os, read the \n as well to prevent incosistency in the algorithm.
@@ -48,6 +49,13 @@ int xRead(int fd,int prevReadCount, char*buf){
     }
        
     return bytesRead;
+}
+
+int xClose(int fd) {
+    if(close(fd) !=0){
+        perror("Error in: close\n");
+        exit(-1);
+    }
 }
 
 //check if char is either a digit 0-9 or an alphabet a-z A-Z
@@ -123,6 +131,8 @@ int getFilesRatio(const char* p1, const char* p2) {
         bytesReadFromFd1 = xRead(fd1,bytesReadFromFd1,&buf1);
         bytesReadFromFd2 = xRead(fd2,bytesReadFromFd2,&buf2);
     }
+    xClose(fd1);
+    xClose(fd2);
     return res; 
 
 }
@@ -141,6 +151,5 @@ int main(int argc, char** argv) {
     } else {
         return 0;
     }
-
-
+    return res;
 }
