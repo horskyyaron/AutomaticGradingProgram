@@ -1,8 +1,10 @@
 files.zip
 a.txt
 b.txt
-*.*~
-*.*.swp
 a.out
 prog
-    
+.undo
+.backup
+.swp 
+comp.out
+files/
