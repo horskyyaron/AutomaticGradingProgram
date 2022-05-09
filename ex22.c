@@ -112,16 +112,28 @@ void readConfFile(char* path,char* students, char* in, char* out) {
 }
 
 
-void gradeStudent(struct Paths* p, char *name, struct Student* s) {
-    printf("%s\n", p->studentsDir);
+void gradeStudent(struct Paths* p, char *s_name, struct Student* s) {
+    printf("grading :%s\n", s_name);
+    char s_dir[MAX_PATH];
+    strcpy(s_dir,p->studentsDir);
+    s_dir[strlen(s_dir)] = '/';
+    strcat(s_dir,s_name);
+    printf("%s\n", s_dir);
+    //building the path to its folder,
     
-    strcpy(s->name, name);
-    s->grade = 89;
-    strcpy(s->comment,"no comment");
+
+
+
+
+
+    //compiling his c file (if not set comment and grade accordingly)
+    //run student program in a different process 
+    //process student output file against expectedoutput.
 }
 
+
 void addGradeToResultsFile(struct Student *student){
-    printf("added student results to file. student: %s\n", student->name);
+    printf("added student results to file.");
 }
 
 void getPaths(struct Paths* p, char* confPath){
