@@ -2,11 +2,13 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <ctype.h>
 #include <string.h>
 #include <dirent.h>
+#include <errno.h>
 
 #define MAX_PATH 150
 #define MAX_CONFIG_FILE_LINE 150
@@ -31,8 +33,6 @@ int isCorrectNumOfArgs(int argc) {
     return argc == 1;
 }
 
-
-
 int xOpen(const char* p, int flags) {
     int fd = open(p,flags);
     if(fd < 0) {
@@ -42,7 +42,6 @@ int xOpen(const char* p, int flags) {
     return fd;
 
 }
-
 
 int xClose(int fd) {
     if(close(fd) !=0){
@@ -84,6 +83,8 @@ int getStudentDir(char* confPath, char* studentsDir, char* originRoot){
     while(c!='/'){
         i--;
         c = confPath[i];
+        if(i == 0)
+            break;
     }
     //copying the path to the conf file directory.
     strncpy(confFileDir,confPath,i);
@@ -99,9 +100,6 @@ int getStudentDir(char* confPath, char* studentsDir, char* originRoot){
     return -1;
 }
 
-
-
-
 void readConfFile(char* path,char* students, char* in, char* out) {
     int fd = xOpen(path, O_RDONLY);
     xReadLine(fd, students);  
@@ -111,38 +109,162 @@ void readConfFile(char* path,char* students, char* in, char* out) {
     
 }
 
+void buildStudentDir(char* buf, char* studentsDirPath, char* s_name) {
+    strcpy(buf,studentsDirPath);
+    buf[strlen(buf)] = '/';
+    strcat(buf,s_name);
+}
 
-void gradeStudent(struct Paths* p, char *s_name, struct Student* s) {
-    printf("grading :%s\n", s_name);
-    char s_dir[MAX_PATH];
-    strcpy(s_dir,p->studentsDir);
-    s_dir[strlen(s_dir)] = '/';
-    strcat(s_dir,s_name);
-    printf("%s\n", s_dir);
-    //building the path to its folder,
+// return 1 if file found, 0 otherwise. c file name is saved into buf.
+int getCFile(char* dir,char* cFileBuf) {
+    int hasCFile = 0; 
+    DIR *dip;
+    struct dirent *dit;
+
+    if((dip = opendir(dir)) == NULL){
+        perror("Error in: opendir");
+        exit(-1);
+    }
     
+    //scanning the student directory for c-cFileBuf.
+    while((dit = readdir(dip)) != NULL) {
+        if(dit->d_type == DT_REG){
+            int len = strlen(dit->d_name);
+            if(dit->d_name[len-1] == 'c' && dit->d_name[len-2] == '.'){
+                hasCFile = 1;
+                strcpy(cFileBuf, dit->d_name);
+                break;
+            }
+        }
+    }
+    return hasCFile;
+}
 
+int compileCFile(char *dir, char* fileName){
+    int status; 
+    char cFilePath[MAX_PATH] = "";
+    strcat(cFilePath, dir);
+    strcat(cFilePath,"/");
+    strcat(cFilePath, fileName);
 
+    //building the exec command arguments.
+    char *argv[5];
+    argv[0] = "gcc";
+    argv[1] = cFilePath; 
+    argv[2] = "-o";
+    argv[3] = "student_exec.out";
+    argv[4] = NULL;
 
+    //compiling in the child process.
+    int pid = (int) fork();
+    if (pid == 0) {
+        execvp(argv[0],argv);
+        exit(1);
+    }
 
+    //waiting for cimpilation to finish. return gcc exit code.
+    waitpid(pid,&status,0);
+    return status == 0;
+}
 
-    //compiling his c file (if not set comment and grade accordingly)
-    //run student program in a different process 
-    //process student output file against expectedoutput.
+int runStudentProgram(){
+    int status;
+    char *argv[2];
+    argv[0] = "./student_exec.out";
+    argv[1] = NULL;
+
+    //running student's program.
+    int pid = (int) fork();
+    if (pid == 0) {
+        //redirecting output and input file descriptors.
+        int input = open("./input.txt",O_RDWR);
+        int output = open("student_out.txt",O_CREAT | O_WRONLY, 0777);
+        dup2(input,STDIN_FILENO);
+        dup2(output,STDOUT_FILENO);
+        close(input);
+        close(output);
+        execvp(argv[0],argv);
+        exit(1);
+    }
+
+    //waiting for cimpilation to finish. return gcc exit code.
+    waitpid(pid,&status,0);
+    return status == 0;
+
+}
+
+int compareOutput(struct Paths* p){
+    printf("comparing with expected output...\n");
+    int student_out = open("./student_out.txt",O_RDONLY);
+    char c;
+    printf("student output:\n---------------------------\n");
+    while(read(student_out, &c, sizeof(c)) != 0) {
+        printf("%c",c);
+    }
+    printf("--------------------------\n");
+    close(student_out);
+    if(remove("./student_out.txt") == 0) {
+        printf("deleted\n");
+    } else{
+        printf("NOT deleted\n");
+    }
+            
+}
+
+void gradeStudent(struct Paths* p, struct Student* s) {
+    int hasCFile = 0;
+    char cFile[MAX_PATH]="";
+    char sDirPathBuffer[MAX_PATH]="";
+
+    //building the path to student's folder,
+    buildStudentDir(sDirPathBuffer, p->studentsDir, s->name);
+
+    //scan for c file in student's dir.
+    if(!getCFile(sDirPathBuffer, cFile)){
+        //NO_C_FILE error.
+        s->grade = 0;
+        strcpy(s->comment, "NO_C_FILE");
+        return;
+    }
+    //compile
+    if(compileCFile(sDirPathBuffer, cFile)){
+        printf("compilation succesful. running %s's program\n",s->name);
+        //run and produce ourput file.
+        runStudentProgram();
+        //compare.
+        compareOutput(p);
+        //grade.
+    } else {
+        printf("compilation error\n");
+    }
 }
 
 
+
 void addGradeToResultsFile(struct Student *student){
-    printf("added student results to file.");
 }
 
 void getPaths(struct Paths* p, char* confPath){
     getcwd(p->originRoot,sizeof(p->originRoot));
-    strcpy(p->confPath, confPath);
+    // handling case where the conf argumnet comes as 'conf.txt' with no './' at the beginning.
+    int hasSlash = 0;
+    for(int i =0; i<strlen(confPath);i++){
+        if(confPath[i]=='/'){
+            hasSlash=1;
+            break;
+        }
+    }
+    if(!hasSlash){
+        strcpy(p->confPath,"./");
+        strcat(p->confPath, confPath);
+    } else {
+        strcpy(p->confPath, confPath);
+    }  
     readConfFile(p->confPath, p->studentsDir, p->inputPath, p->expectedOutPath);
     getStudentDir(p->confPath, p->studentsDir,p->originRoot); 
 
 }
+
 
 int main(int argc, char **argv) {
     if(!isCorrectNumOfArgs(argc-1)){
@@ -151,55 +273,28 @@ int main(int argc, char **argv) {
     }
 
     struct Paths paths;
-    DIR *dip;
-    struct dirent *dit;
+    DIR *studentsDirPtr;
+    struct dirent *dirItem;
     struct Student student;
 
     //getting all the paths from the configuration file.
     getPaths(&paths, argv[1]);
 
 
-    if((dip = opendir(paths.studentsDir)) == NULL){
+    if((studentsDirPtr = opendir(paths.studentsDir)) == NULL){
         perror("Error in: opendir");
         exit(-1);
     }
     
     //scanning the student directory, ignoring non-directory files.
-    while((dit = readdir(dip)) != NULL) {
-        if(dit->d_type == DT_DIR && strcmp(dit->d_name,".") != 0 && strcmp(dit->d_name,"..") != 0){
+    while((dirItem = readdir(studentsDirPtr)) != NULL) {
+        if(dirItem->d_type == DT_DIR && strcmp(dirItem->d_name,".") != 0 && strcmp(dirItem->d_name,"..") != 0){
             // checking student, results will be saved to student's struct.
-            gradeStudent(&paths, dit->d_name, &student); 
+            strcpy(student.name, dirItem->d_name);
+            gradeStudent(&paths, &student); 
             // adding student's results to results file,
             addGradeToResultsFile(&student);    
         }
     }
-             
-
-
-
-
-
-
-//    
-//    printf("%s\n", originRoot);
-//    printf("%s\n", confPath);
-//    printf("%s\n", studentsDir);
-//    printf("%s\n", inputPath);
-//    printf("%s\n", expectedOutPath);
-//
-
-    //for every student S in the student dir:
-    //  grade = checkGrade(s)
-    //  add grade to csv file.
-
-
-
-
-
-
-
-
-        
-    
     return 0; 
 }
