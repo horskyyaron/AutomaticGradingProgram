@@ -194,19 +194,7 @@ int runStudentProgram(){
 }
 
 int compareOutput(struct Paths* p){
-    printf("comparing with expected output...\n");
 
-    {{{ //writing user output to screen   
-//    int student_out = open("./student_out.txt",O_RDONLY);
-//    char c;
-//  
-//    printf("student output:\n---------------------------\n");
-//    while(read(student_out, &c, sizeof(c)) != 0) {
-//        printf("%c",c);
-//    }
-//    printf("--------------------------\n");
-//    close(student_out);
-      }}} 
 
     int res;
     int pid = (int) fork();
@@ -220,14 +208,12 @@ int compareOutput(struct Paths* p){
         exit(-1);
     }
     waitpid(pid,&res,0);
-    printf("comp.out results are: %d\n",WEXITSTATUS(res));
 
 
     //removing student output after comparing with expected output file.
-    if(remove("./student_out.txt") == 0) {
-        printf("deleted\n");
-    } else{
-        printf("NOT deleted\n");
+    if(remove("./student_out.txt") < 0) {
+        perror("Exit in: remove");
+        exit(-1);
     }
     return WEXITSTATUS(res);
 }
@@ -268,15 +254,13 @@ void gradeStudent(struct Paths* p, struct Student* s) {
     }
     //compile
     if(compileCFile(sDirPathBuffer, cFile)==0){
-        printf("compilation succesful. running %s's program\n",s->name);
-        //run and produce ourput file.
+        //run and produce student output file.
         runStudentProgram();
         //grade.
         calcGrade(compareOutput(p), s);
     } else {
         s->grade = 10;
         strcpy(s->comment,"COMPILATION_ERROR");
-        printf("compilation error\n");
     }
 }
 
