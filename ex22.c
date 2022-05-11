@@ -164,7 +164,7 @@ int compileCFile(char *dir, char* fileName){
 
     //waiting for cimpilation to finish. return gcc exit code.
     waitpid(pid,&status,0);
-    return status == 0;
+    return WEXITSTATUS(status);
 }
 
 int runStudentProgram(){
@@ -208,7 +208,7 @@ int compareOutput(struct Paths* p){
 //    close(student_out);
       }}} 
 
-    int status;
+    int res;
     int pid = (int) fork();
     if(pid == 0) {
         char *argv[4];
@@ -219,8 +219,8 @@ int compareOutput(struct Paths* p){
         execvp(argv[0],argv);
         exit(-1);
     }
-    waitpid(pid,&status,0);
-    printf("comp.out results are: %d\n",WEXITSTATUS(status));
+    waitpid(pid,&res,0);
+    printf("comp.out results are: %d\n",WEXITSTATUS(res));
 
 
     //removing student output after comparing with expected output file.
@@ -229,13 +229,32 @@ int compareOutput(struct Paths* p){
     } else{
         printf("NOT deleted\n");
     }
-            
+    return WEXITSTATUS(res);
+}
+
+void calcGrade(int compareRes, struct Student* s){
+    int res;
+    switch(compareRes){
+        case 1:
+            s->grade = 100;
+            strcpy(s->comment, "EXCELLENT");
+            break;
+        case 2:
+            s->grade = 50;
+            strcpy(s->comment, "WRONG");
+            break;
+        case 3:
+            s->grade = 75;
+            strcpy(s->comment, "SIMILAR");
+            break;
+    }
 }
 
 void gradeStudent(struct Paths* p, struct Student* s) {
     int hasCFile = 0;
     char cFile[MAX_PATH]="";
     char sDirPathBuffer[MAX_PATH]="";
+    int res, grade;
 
     //building the path to student's folder,
     buildStudentDir(sDirPathBuffer, p->studentsDir, s->name);
@@ -244,18 +263,19 @@ void gradeStudent(struct Paths* p, struct Student* s) {
     if(!getCFile(sDirPathBuffer, cFile)){
         //NO_C_FILE error.
         s->grade = 0;
-        strcpy(s->comment, "NO_C_FILE");
+        strcpy(s->comment,"NO_C_FILE");
         return;
     }
     //compile
-    if(compileCFile(sDirPathBuffer, cFile)){
+    if(compileCFile(sDirPathBuffer, cFile)==0){
         printf("compilation succesful. running %s's program\n",s->name);
         //run and produce ourput file.
         runStudentProgram();
-        //compare.
-        compareOutput(p);
         //grade.
+        calcGrade(compareOutput(p), s);
     } else {
+        s->grade = 10;
+        strcpy(s->comment,"COMPILATION_ERROR");
         printf("compilation error\n");
     }
 }
@@ -313,6 +333,7 @@ int main(int argc, char **argv) {
             // checking student, results will be saved to student's struct.
             strcpy(student.name, dirItem->d_name);
             gradeStudent(&paths, &student); 
+            printf("%s,%d,%s\n",student.name,student.grade,student.comment);
             // adding student's results to results file,
             addGradeToResultsFile(&student);    
         }
