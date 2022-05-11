@@ -67,6 +67,8 @@ int getFilesRatio(const char* p1, const char* p2) {
     int res = IDENTICAL;  
     int fd1 = xOpen(p1,O_RDONLY);
     int fd2 = xOpen(p2,O_RDONLY);
+    int totalBytesF1 = 0;
+    int totalBytesF2 = 0;
     char buf1;
     char buf2;
     int bytesReadFromFd1;
@@ -74,6 +76,8 @@ int getFilesRatio(const char* p1, const char* p2) {
 
     bytesReadFromFd1 = read(fd1,&buf1,sizeof(char)); 
     bytesReadFromFd2 = read(fd2,&buf2,sizeof(char)); 
+    totalBytesF1+=bytesReadFromFd1;
+    totalBytesF2+=bytesReadFromFd2;
     while(1) {
         //finished scanning both files.
         if(bytesReadFromFd1 == 0 && bytesReadFromFd2 == 0){
@@ -83,6 +87,7 @@ int getFilesRatio(const char* p1, const char* p2) {
         if(bytesReadFromFd1 == 0 && bytesReadFromFd2 != 0) {
             while(bytesReadFromFd2 != 0) {
                 bytesReadFromFd2 = xRead(fd2,bytesReadFromFd2,&buf2);
+                totalBytesF2+=bytesReadFromFd2;
                 if(isDigOrChar(buf2)){
                     res = DIFF;
                     break;
@@ -93,6 +98,7 @@ int getFilesRatio(const char* p1, const char* p2) {
         if(bytesReadFromFd2 == 0 && bytesReadFromFd1 != 0) {
             while(bytesReadFromFd1 != 0) {
                 bytesReadFromFd1 = xRead(fd1,bytesReadFromFd1,&buf1);
+                totalBytesF1+=bytesReadFromFd1;
                 if(isDigOrChar(buf1)){
                     res = DIFF;
                     break;
@@ -106,6 +112,7 @@ int getFilesRatio(const char* p1, const char* p2) {
         if(isDigOrChar(buf1) && !isDigOrChar(buf2)){
             while(!isDigOrChar(buf2)){
                 bytesReadFromFd2 = xRead(fd2,bytesReadFromFd2,&buf2);
+                totalBytesF2+=bytesReadFromFd2;
                 if(bytesReadFromFd2==0)
                     break;
             }
@@ -113,6 +120,7 @@ int getFilesRatio(const char* p1, const char* p2) {
         if(isDigOrChar(buf1) && !isDigOrChar(buf1)){
             while(!isDigOrChar(buf1)){
                 bytesReadFromFd2 = xRead(fd2,bytesReadFromFd2,&buf1);
+                totalBytesF2+=bytesReadFromFd2;
                 if(bytesReadFromFd2==0)
                     break;
             }
@@ -130,9 +138,14 @@ int getFilesRatio(const char* p1, const char* p2) {
 
         bytesReadFromFd1 = xRead(fd1,bytesReadFromFd1,&buf1);
         bytesReadFromFd2 = xRead(fd2,bytesReadFromFd2,&buf2);
+        totalBytesF1+=bytesReadFromFd1;
+        totalBytesF2+=bytesReadFromFd2;
     }
     xClose(fd1);
     xClose(fd2);
+    if(res == IDENTICAL && totalBytesF2 != totalBytesF1){
+        res = SIMILAR;
+    }
     return res; 
 
 }

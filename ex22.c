@@ -195,14 +195,35 @@ int runStudentProgram(){
 
 int compareOutput(struct Paths* p){
     printf("comparing with expected output...\n");
-    int student_out = open("./student_out.txt",O_RDONLY);
-    char c;
-    printf("student output:\n---------------------------\n");
-    while(read(student_out, &c, sizeof(c)) != 0) {
-        printf("%c",c);
+
+    {{{ //writing user output to screen   
+//    int student_out = open("./student_out.txt",O_RDONLY);
+//    char c;
+//  
+//    printf("student output:\n---------------------------\n");
+//    while(read(student_out, &c, sizeof(c)) != 0) {
+//        printf("%c",c);
+//    }
+//    printf("--------------------------\n");
+//    close(student_out);
+      }}} 
+
+    int status;
+    int pid = (int) fork();
+    if(pid == 0) {
+        char *argv[4];
+        argv[0] = "./comp.out";
+        argv[1] = "student_out.txt";
+        argv[2] = "correct_output.txt";
+        argv[3] = NULL;
+        execvp(argv[0],argv);
+        exit(-1);
     }
-    printf("--------------------------\n");
-    close(student_out);
+    waitpid(pid,&status,0);
+    printf("comp.out results are: %d\n",WEXITSTATUS(status));
+
+
+    //removing student output after comparing with expected output file.
     if(remove("./student_out.txt") == 0) {
         printf("deleted\n");
     } else{
