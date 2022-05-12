@@ -9,11 +9,12 @@
 #include <string.h>
 #include <dirent.h>
 #include <errno.h>
+#include <libgen.h>
 
 #define MAX_PATH 150
 #define MAX_CONFIG_FILE_LINE 150
 #define MAX_STU_NAME_SIZE 100
-#define MAX_COMMENT_SIZE 100
+#define MAX_COMMENT_SIZE 50 
 
 struct Student {
     char name[MAX_STU_NAME_SIZE];   
@@ -23,10 +24,15 @@ struct Student {
 
 struct Paths {
     char confPath[MAX_PATH];
+    char confDir[MAX_PATH];
     char studentsDir[MAX_PATH];
     char inputPath[MAX_PATH];
     char expectedOutPath[MAX_PATH];
     char originRoot[MAX_PATH];
+    char studentOutPut[MAX_PATH];
+    char studentExec[MAX_PATH];
+    char compProgPath[MAX_PATH];
+    char resultsFile[MAX_PATH];
 };
 
 int isCorrectNumOfArgs(int argc) {
@@ -75,36 +81,11 @@ int xChdir(char* path){
     }
 }
 
-int getStudentDir(char* confPath, char* studentsDir, char* originRoot){
-    int len = strlen(confPath);
-    int i = len - 1;
-    char c = confPath[i];
-    char confFileDir[MAX_CONFIG_FILE_LINE];
-    while(c!='/'){
-        i--;
-        c = confPath[i];
-        if(i == 0)
-            break;
-    }
-    //copying the path to the conf file directory.
-    strncpy(confFileDir,confPath,i);
-    confFileDir[i] = '\0';
-    if(xChdir(confFileDir)==0){
-        if(xChdir(studentsDir)==0){
-            getcwd(studentsDir,MAX_CONFIG_FILE_LINE);
-        }
-    }
-    if(xChdir(originRoot)==0){
-        return 0;
-    }
-    return -1;
-}
-
-void readConfFile(char* path,char* students, char* in, char* out) {
-    int fd = xOpen(path, O_RDONLY);
-    xReadLine(fd, students);  
-    xReadLine(fd, in); 
-    xReadLine(fd, out);
+void readConfFile(struct Paths* p) {
+    int fd = xOpen(p->confPath, O_RDONLY);
+    xReadLine(fd, p->studentsDir);  
+    xReadLine(fd, p->inputPath); 
+    xReadLine(fd, p->expectedOutPath);
     xClose(fd);
     
 }
@@ -140,7 +121,7 @@ int getCFile(char* dir,char* cFileBuf) {
     return hasCFile;
 }
 
-int compileCFile(char *dir, char* fileName){
+int compileCFile(char *dir, char* fileName, struct Paths* p){
     int status; 
     char cFilePath[MAX_PATH] = "";
     strcat(cFilePath, dir);
@@ -152,7 +133,7 @@ int compileCFile(char *dir, char* fileName){
     argv[0] = "gcc";
     argv[1] = cFilePath; 
     argv[2] = "-o";
-    argv[3] = "student_exec.out";
+    argv[3] = p->studentExec;
     argv[4] = NULL;
 
     //compiling in the child process.
@@ -167,18 +148,19 @@ int compileCFile(char *dir, char* fileName){
     return WEXITSTATUS(status);
 }
 
-int runStudentProgram(){
+int runStudentProgram(struct Paths* p){
     int status;
     char *argv[2];
-    argv[0] = "./student_exec.out";
+    argv[0] = p->studentExec;
     argv[1] = NULL;
 
     //running student's program.
     int pid = (int) fork();
     if (pid == 0) {
         //redirecting output and input file descriptors.
-        int input = open("./input.txt",O_RDWR);
-        int output = open("student_out.txt",O_CREAT | O_WRONLY, 0777);
+        xChdir(p->originRoot);
+        int input = open(p->inputPath,O_RDWR);
+        int output = open(p->studentOutPut ,O_CREAT | O_WRONLY, 0777);
         dup2(input,STDIN_FILENO);
         dup2(output,STDOUT_FILENO);
         close(input);
@@ -194,15 +176,13 @@ int runStudentProgram(){
 }
 
 int compareOutput(struct Paths* p){
-
-
     int res;
     int pid = (int) fork();
     if(pid == 0) {
         char *argv[4];
-        argv[0] = "./comp.out";
-        argv[1] = "student_out.txt";
-        argv[2] = "correct_output.txt";
+        argv[0] = p->compProgPath;
+        argv[1] = p->studentOutPut;
+        argv[2] = p->expectedOutPath; 
         argv[3] = NULL;
         execvp(argv[0],argv);
         exit(-1);
@@ -211,7 +191,7 @@ int compareOutput(struct Paths* p){
 
 
     //removing student output after comparing with expected output file.
-    if(remove("./student_out.txt") < 0) {
+    if(remove(p->studentOutPut) < 0) {
         perror("Exit in: remove");
         exit(-1);
     }
@@ -253,9 +233,9 @@ void gradeStudent(struct Paths* p, struct Student* s) {
         return;
     }
     //compile
-    if(compileCFile(sDirPathBuffer, cFile)==0){
+    if(compileCFile(sDirPathBuffer, cFile, p)==0){
         //run and produce student output file.
-        runStudentProgram();
+        runStudentProgram(p);
         //grade.
         calcGrade(compareOutput(p), s);
     } else {
@@ -265,11 +245,97 @@ void gradeStudent(struct Paths* p, struct Student* s) {
 }
 
 
-
-void addGradeToResultsFile(struct Student *student){
+int xWrite(int fd, char* buf, size_t count) {
+    if(write(fd,buf,strlen(buf))<0){
+        perror("Error in: write");
+        printf("%d",errno);
+        exit(-1);
+    }
+    return 0;
 }
 
-void getPaths(struct Paths* p, char* confPath){
+
+void addGradeToResultsFile(struct Student *s, struct Paths* p){
+   int fd = open(p->resultsFile,O_CREAT | O_APPEND | O_WRONLY ,0777);  
+   char buf[sizeof(s->name)+sizeof(s->grade)+sizeof(s->comment)];
+   sprintf(buf,"%s,%d,%s\n",s->name,s->grade,s->comment);
+
+   xWrite(fd,buf,strlen(buf));
+          
+}
+
+void getFullPathToFile(char* path, struct Paths* p){
+   char *dirc, *basec, *bname, *dname;
+   dirc = strdup(path);
+   basec = strdup(path);
+   dname = dirname(dirc);
+   bname = basename(basec);
+
+   //trying to change dir to file's dir from the origin dir.
+   if(access(dname,F_OK)==0){
+       if(xChdir(dname)==0){
+           getcwd(path,MAX_PATH);
+       }
+   } else {
+       //changing to conf.txt dir and trying to access from there (case where relative path is from conf.txt file and not from root).
+       if(xChdir(p->confDir)==0){
+           if(xChdir(dname)==0){
+               getcwd(path,MAX_PATH);
+           }
+       }
+   }
+
+   strcat(path,"/");
+   strcat(path, bname);
+
+   //cd back to root.
+   xChdir(p->originRoot);
+   free(dirc);
+   free(basec);
+}
+
+void getFullPathToDirFromFileInFolder(char* path, struct Paths* p){
+   char *dirc, *basec, *bname, *dname;
+   dirc = strdup(path);
+   dname = dirname(dirc);
+
+   //trying to change dir to file's dir from the origin dir.
+   if(access(dname,F_OK)==0){
+       if(xChdir(dname)==0){
+           getcwd(path,MAX_PATH);
+       }
+   } else {
+       //changing to conf.txt dir and trying to access from there (case where relative path is from conf.txt file and not from root).
+       if(xChdir(p->confDir)==0){
+           if(xChdir(dname)==0){
+               getcwd(path,MAX_PATH);
+           }
+       }
+   }
+
+   //cd back to root.
+   xChdir(p->originRoot);
+   free(dirc);
+} 
+
+void getFullPathToFolderFromFolderPath(char* path,struct Paths* p) {
+   //trying to change dir to file's dir from the origin dir.
+   if(access(path,F_OK)==0){
+       if(xChdir(path)==0){
+           getcwd(path,MAX_PATH);
+       }
+   } else {
+       //changing to conf.txt dir and trying to access from there (case where relative path is from conf.txt file and not from root).
+       if(xChdir(p->confDir)==0){
+           if(xChdir(path)==0){
+               getcwd(path,MAX_PATH);
+           }
+       }
+   }
+   xChdir(p->originRoot);
+}
+
+void getPaths(struct Paths* p, char* confPath) {
     getcwd(p->originRoot,sizeof(p->originRoot));
     // handling case where the conf argumnet comes as 'conf.txt' with no './' at the beginning.
     int hasSlash = 0;
@@ -285,9 +351,13 @@ void getPaths(struct Paths* p, char* confPath){
     } else {
         strcpy(p->confPath, confPath);
     }  
-    readConfFile(p->confPath, p->studentsDir, p->inputPath, p->expectedOutPath);
-    getStudentDir(p->confPath, p->studentsDir,p->originRoot); 
-
+    readConfFile(p);
+    strcpy(p->confDir,p->confPath);
+    getFullPathToDirFromFileInFolder(p->confDir,p);
+    getFullPathToFile(p->confPath,p);
+    getFullPathToFile(p->inputPath,p);
+    getFullPathToFile(p->expectedOutPath,p);
+    getFullPathToFolderFromFolderPath(p->studentsDir,p);
 }
 
 
@@ -297,16 +367,19 @@ int main(int argc, char **argv) {
         exit(-1);
     }
 
-    struct Paths paths;
+    struct Paths p;
     DIR *studentsDirPtr;
     struct dirent *dirItem;
-    struct Student student;
+    struct Student s;
 
     //getting all the paths from the configuration file.
-    getPaths(&paths, argv[1]);
+    getPaths(&p, argv[1]);
+    strcpy(p.studentOutPut,"./student_out.txt");
+    strcpy(p.studentExec,"./student_exec.out");
+    strcpy(p.compProgPath, "./comp.out");
+    strcpy(p.resultsFile, "./results.csv");
 
-
-    if((studentsDirPtr = opendir(paths.studentsDir)) == NULL){
+    if((studentsDirPtr = opendir(p.studentsDir)) == NULL){
         perror("Error in: opendir");
         exit(-1);
     }
@@ -315,11 +388,10 @@ int main(int argc, char **argv) {
     while((dirItem = readdir(studentsDirPtr)) != NULL) {
         if(dirItem->d_type == DT_DIR && strcmp(dirItem->d_name,".") != 0 && strcmp(dirItem->d_name,"..") != 0){
             // checking student, results will be saved to student's struct.
-            strcpy(student.name, dirItem->d_name);
-            gradeStudent(&paths, &student); 
-            printf("%s,%d,%s\n",student.name,student.grade,student.comment);
+            strcpy(s.name, dirItem->d_name);
+            gradeStudent(&p, &s); 
             // adding student's results to results file,
-            addGradeToResultsFile(&student);    
+            addGradeToResultsFile(&s,&p);    
         }
     }
     return 0; 
