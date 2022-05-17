@@ -11,31 +11,27 @@
 #include <errno.h>
 #include <libgen.h>
 
-#define MAX_PATH 150
-#define MAX_CONFIG_FILE_LINE 150
-#define MAX_STU_NAME_SIZE 100
-#define MAX_COMMENT_SIZE 50 
 
 int validateDirPath(char* dirPath);
 
 struct Student {
-    char name[MAX_STU_NAME_SIZE];   
+    char name[150];   
     int grade;
-    char comment[MAX_COMMENT_SIZE];
+    char comment[150];
 };
 
 struct Paths {
-    char confPath[MAX_PATH];
-    char confDir[MAX_PATH];
-    char studentsDir[MAX_PATH];
-    char inputPath[MAX_PATH];
-    char expectedOutPath[MAX_PATH];
-    char originRoot[MAX_PATH];
-    char studentOutPut[MAX_PATH];
-    char studentExec[MAX_PATH];
-    char compProgPath[MAX_PATH];
-    char resultsFile[MAX_PATH];
-    char errorFile[MAX_PATH];
+    char confPath[150];
+    char confDir[150];
+    char studentsDir[150];
+    char inputPath[150];
+    char expectedOutPath[150];
+    char originRoot[150];
+    char studentOutPut[150];
+    char studentExec[150];
+    char compProgPath[150];
+    char resultsFile[150];
+    char errorFile[150];
 };
 
 void testPrint(char* msg, char* str){
@@ -142,7 +138,7 @@ int getCFile(char* dir,char* cFileBuf) {
 
 int compileCFile(char *dir, char* fileName, struct Paths* p){
     int status; 
-    char cFilePath[MAX_PATH] = "";
+    char cFilePath[150] = "";
     strcat(cFilePath, dir);
     strcat(cFilePath,"/");
     strcat(cFilePath, fileName);
@@ -253,8 +249,8 @@ void calcGrade(int compareRes, struct Student* s){
 //return value: 0 succes, -1 error.
 int gradeStudent(struct Paths* p, struct Student* s) {
     int hasCFile = 0;
-    char cFile[MAX_PATH]="";
-    char sDirPathBuffer[MAX_PATH]="";
+    char cFile[150]="";
+    char sDirPathBuffer[150]="";
     int res, grade;
 
     //building the path to student's folder,
@@ -312,7 +308,7 @@ void addGradeToResultsFile(struct Student *s, struct Paths* p){
 }
 
 void getAbsPath(char* path){
-    char buf[MAX_PATH];
+    char buf[150];
     memset(buf,0,sizeof(buf));
     realpath(path,buf); 
     strcpy(path,buf);              
@@ -450,11 +446,8 @@ int main(int argc, char **argv) {
     strcpy(p.studentOutPut,"./student_out.txt");
     strcpy(p.studentExec,"./student_exec.out");
     strcpy(p.compProgPath, "./comp.out");
-
-    strcpy(p.resultsFile,p.originRoot);
-    strcat(p.resultsFile, "/results.csv");
-    strcpy(p.errorFile,p.originRoot);
-    strcat(p.errorFile, "/errors.txt");
+    strcpy(p.resultsFile,"./results.csv");
+    strcpy(p.errorFile,"./errors.txt");
 
     if((studentsDirPtr = opendir(p.studentsDir)) == NULL){
         perror("Error in: opendir");
