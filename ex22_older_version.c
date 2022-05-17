@@ -195,9 +195,9 @@ int runStudentProgram(struct Paths* p){
         exit(-1);
     }
     
-    //waiting for students prog to finish. 
+    //waiting for cimpilation to finish. return gcc exit code.
     waitpid(pid,&status,0);
-    if(status != 0){
+    if(WEXITSTATUS(status) == -1){
         return -1;
     }
 
@@ -279,13 +279,9 @@ int gradeStudent(struct Paths* p, struct Student* s) {
     //compile
     if(compileCFile(sDirPathBuffer, cFile, p)==0){
         //run and produce student output file.
-        if(runStudentProgram(p)<0){
-            s->grade = 0;
-            strcpy(s->comment,"RUNTIME_ERROR");
-        } else {
-            //grade.
-            calcGrade(compareOutput(p), s);
-        }
+        runStudentProgram(p);
+        //grade.
+        calcGrade(compareOutput(p), s);
     } else {
         s->grade = 10;
         strcpy(s->comment,"COMPILATION_ERROR");
@@ -312,7 +308,7 @@ void addGradeToResultsFile(struct Student *s, struct Paths* p){
 }
 
 void getAbsPath(char* path){
-    char buf[MAX_PATH];
+    char buf[100];
     memset(buf,0,sizeof(buf));
     realpath(path,buf); 
     strcpy(path,buf);              
@@ -354,7 +350,6 @@ void validateDir(struct Paths* p){
     } 
     getAbsPath(p->studentsDir);
 }
-
 
 //check if given path to a file is accesible and is a file type.
 int isFileAndAccsessible(char* path){
@@ -430,7 +425,9 @@ void getPaths(struct Paths* p, char* confPath) {
     getcwd(p->originRoot,sizeof(p->originRoot));
     getConfFileAndDirPaths(p,confPath);
     readConfFile(p);
+    
     validateConfFileContent(p); 
+    
 }
 
 
@@ -450,11 +447,8 @@ int main(int argc, char **argv) {
     strcpy(p.studentOutPut,"./student_out.txt");
     strcpy(p.studentExec,"./student_exec.out");
     strcpy(p.compProgPath, "./comp.out");
-
-    strcpy(p.resultsFile,p.originRoot);
-    strcat(p.resultsFile, "/results.csv");
-    strcpy(p.errorFile,p.originRoot);
-    strcat(p.errorFile, "/errors.txt");
+    strcpy(p.resultsFile, "./results.csv");
+    strcpy(p.errorFile, "./error.txt");
 
     if((studentsDirPtr = opendir(p.studentsDir)) == NULL){
         perror("Error in: opendir");
