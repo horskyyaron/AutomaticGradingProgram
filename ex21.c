@@ -1,14 +1,9 @@
 #include <stdio.h>
 #include <fcntl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <ctype.h>
 
-#define IDENTICAL 1
-#define SIMILAR 3
-#define DIFF 2
 
 int isCorrectNumOfArgs(int numOfArgs) {
     if(numOfArgs != 2) {
@@ -64,15 +59,15 @@ int isDigOrChar(char c) {
 }
 
 int getFilesRatio(const char* p1, const char* p2) {
-    int res = IDENTICAL;
+    int identical = 1;
+    int similar = 3;
+    int diff = 2;
+    int res = identical;
     int fd1 = xOpen(p1,O_RDONLY);
     int fd2 = xOpen(p2,O_RDONLY);
-    int totalBytesF1 = 0;
-    int totalBytesF2 = 0;
-    char buf1;
-    char buf2;
-    int bytesReadFromFd1;
-    int bytesReadFromFd2;
+    int totalBytesF1 = 0,totalBytesF2 = 0;
+    char buf1,buf2;
+    int bytesReadFromFd1,bytesReadFromFd2;
 
     bytesReadFromFd1 = read(fd1,&buf1,sizeof(char));
     bytesReadFromFd2 = read(fd2,&buf2,sizeof(char));
@@ -89,7 +84,7 @@ int getFilesRatio(const char* p1, const char* p2) {
                 bytesReadFromFd2 = xRead(fd2,bytesReadFromFd2,&buf2);
                 totalBytesF2+=bytesReadFromFd2;
                 if(isDigOrChar(buf2)){
-                    res = DIFF;
+                    res = diff;
                     break;
                 }
             }
@@ -100,7 +95,7 @@ int getFilesRatio(const char* p1, const char* p2) {
                 bytesReadFromFd1 = xRead(fd1,bytesReadFromFd1,&buf1);
                 totalBytesF1+=bytesReadFromFd1;
                 if(isDigOrChar(buf1)){
-                    res = DIFF;
+                    res = diff;
                     break;
                 }
             }
@@ -110,7 +105,7 @@ int getFilesRatio(const char* p1, const char* p2) {
 
         //reading until comparing two chars.
         if(isDigOrChar(buf1) && !isDigOrChar(buf2)){
-            res = SIMILAR;
+            res = similar;
             while(!isDigOrChar(buf2)){
                 bytesReadFromFd2 = xRead(fd2,bytesReadFromFd2,&buf2);
                 totalBytesF2+=bytesReadFromFd2;
@@ -120,7 +115,7 @@ int getFilesRatio(const char* p1, const char* p2) {
         }
         if(isDigOrChar(buf2) && !isDigOrChar(buf1)){
             while(!isDigOrChar(buf1)){
-                res = SIMILAR;
+                res = similar;
                 bytesReadFromFd1 = xRead(fd1,bytesReadFromFd2,&buf1);
                 totalBytesF1+=bytesReadFromFd1;
                 if(bytesReadFromFd2==0)
@@ -130,9 +125,9 @@ int getFilesRatio(const char* p1, const char* p2) {
 
         if(buf1!=buf2){
             if(isSimilar(buf1,buf2)){
-                res = SIMILAR;
+                res = similar;
             } else {
-                res = DIFF;
+                res = diff;
                 break;
             }
         }
@@ -145,8 +140,8 @@ int getFilesRatio(const char* p1, const char* p2) {
     }
     xClose(fd1);
     xClose(fd2);
-    if(res == IDENTICAL && totalBytesF2 != totalBytesF1){
-        res = SIMILAR;
+    if(res == identical && totalBytesF2 != totalBytesF1){
+        res = similar;
     }
     return res;
 
@@ -156,16 +151,6 @@ int main(int argc, char** argv) {
     int res=-1;
     if(isCorrectNumOfArgs(argc-1)){
         res = getFilesRatio(argv[1],argv[2]);
-//        {{{  // in testing with testTextComparison.sh uncomment this section.
-//        if(res == IDENTICAL) {
-//            printf("files are identical\n");
-//        } else if (res == SIMILAR) {
-//            printf("files are similar\n");
-//        } else {
-//            printf("files are different\n");
-//        }
-//
-//                }}}
     }
     return res;
 }

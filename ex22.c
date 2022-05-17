@@ -34,13 +34,6 @@ struct Paths {
     char errorFile[150];
 };
 
-void testPrint(char* msg, char* str){
-    if(msg != NULL) {
-        printf("%s %s\n", msg, str);
-    } else {
-        printf("%s\n", str);
-    }
-}
 int isCorrectNumOfArgs(int argc) {
     return argc == 1;
 }
@@ -156,8 +149,12 @@ int compileCFile(char *dir, char* fileName, struct Paths* p){
     if (pid == 0) {
         //redirecting stderr to erros.txt file.
         int errorFd= open(p->errorFile,O_CREAT | O_APPEND | O_WRONLY ,0777);  
+        if(errorFd <0){
+            perror("Error in: open");
+            exit(-1);
+        } 
         dup2(errorFd,STDERR_FILENO);
-        close(errorFd);
+        xClose(errorFd);
         execvp(argv[0],argv);
         exit(-1);
     }
@@ -181,6 +178,9 @@ int runStudentProgram(struct Paths* p){
         int inputFd = open(p->inputPath,O_RDWR);
         int outputFd = open(p->studentOutPut ,O_CREAT | O_WRONLY, 0777);
         int errorFd= open(p->errorFile,O_CREAT | O_APPEND | O_WRONLY ,0777);  
+        if(inputFd < 0 || outputFd < 0 | errorFd < 0){
+            perror("Error in: open");
+        }
         dup2(inputFd,STDIN_FILENO);
         dup2(outputFd,STDOUT_FILENO);
         dup2(errorFd,STDERR_FILENO);
@@ -200,6 +200,12 @@ int runStudentProgram(struct Paths* p){
     return 0;
 }
 
+void removeFile(char* file){
+    if(remove(file) < 0){
+        perror("Exit in: remove");
+        exit(-1);
+    }
+}
 int compareOutput(struct Paths* p){
     int res;
     int pid = (int) fork();
@@ -215,33 +221,28 @@ int compareOutput(struct Paths* p){
     waitpid(pid,&res,0);
 
     //removing student output after comparing with expected output file.
-    if(remove(p->studentOutPut) < 0) {
-        perror("Exit in: remove");
-        exit(-1);
-    }
-    
-    if(remove(p->studentExec) < 0) {
-        perror("Exit in: remove");
-        exit(-1);
-    }
+    removeFile(p->studentOutPut);
+    removeFile(p->studentExec);
     
     return WEXITSTATUS(res);
+}
+
+void setGrade(struct Student* s, int grade, const char* comment){
+    s->grade = grade;
+    strcpy(s->comment,comment);
 }
 
 void calcGrade(int compareRes, struct Student* s){
     int res;
     switch(compareRes){
         case 1:
-            s->grade = 100;
-            strcpy(s->comment, "EXCELLENT");
+            setGrade(s,100,"EXCELLENT");
             break;
         case 2:
-            s->grade = 50;
-            strcpy(s->comment, "WRONG");
+            setGrade(s,50,"WRONG");
             break;
         case 3:
-            s->grade = 75;
-            strcpy(s->comment, "SIMILAR");
+            setGrade(s,75,"SIMILAR");
             break;
     }
 }
@@ -265,10 +266,10 @@ int gradeStudent(struct Paths* p, struct Student* s) {
 
     if(hasCFile == 0){
         //NO_C_FILE error.
-        s->grade = 0;
-        strcpy(s->comment,"NO_C_FILE");
+        setGrade(s,0,"NO_C_FILE");
         return 0;
     } else if(hasCFile == -1) {
+        //error in opening the student's dir.
         return -1;
     }
 
@@ -276,23 +277,20 @@ int gradeStudent(struct Paths* p, struct Student* s) {
     if(compileCFile(sDirPathBuffer, cFile, p)==0){
         //run and produce student output file.
         if(runStudentProgram(p)<0){
-            s->grade = 0;
-            strcpy(s->comment,"RUNTIME_ERROR");
+            setGrade(s,0,"RUNTIME_ERROR");
         } else {
             //grade.
             calcGrade(compareOutput(p), s);
         }
     } else {
-        s->grade = 10;
-        strcpy(s->comment,"COMPILATION_ERROR");
+        setGrade(s,10,"COMPILATION_ERROR");
     }
     return 0;
 }
 
-int xWrite(int fd, char* buf, size_t count) {
+int xWrite(int fd, char* buf) {
     if(write(fd,buf,strlen(buf))<0){
         perror("Error in: write");
-        printf("%d",errno);
         exit(-1);
     }
     return 0;
@@ -300,9 +298,13 @@ int xWrite(int fd, char* buf, size_t count) {
 
 void addGradeToResultsFile(struct Student *s, struct Paths* p){
    int fd = open(p->resultsFile,O_CREAT | O_APPEND | O_WRONLY ,0777);  
+   if(fd < 0) {
+       perror("Error in: open");
+       return;
+   }
    char buf[sizeof(s->name)+sizeof(s->grade)+sizeof(s->comment)];
    sprintf(buf,"%s,%d,%s\n",s->name,s->grade,s->comment);
-   xWrite(fd,buf,strlen(buf));
+   xWrite(fd,buf);
    xClose(fd);
 }
 
@@ -312,13 +314,6 @@ void getAbsPath(char* path){
     realpath(path,buf); 
     strcpy(path,buf);              
 }
-
-void getAbsPathForConfPaths(struct Paths* p) {
-    getAbsPath(p->studentsDir);
-    getAbsPath(p->inputPath);
-    getAbsPath(p->expectedOutPath);
-}
-
 
 //check if dir is valid. return -1 if invalid. 0 if valid.
 int validateDirPath(char* dirPath){
@@ -338,7 +333,7 @@ void validateDir(struct Paths* p){
     if(validateDirPath(p->studentsDir)<0) {
        if(xChdir(p->confDir)==0){
           if(validateDirPath(p->studentsDir)<0){
-              printf("Not a valid directory\n");
+              xWrite(STDOUT_FILENO, "Not a valid directory\n");
               exit(-1);
           }
           getAbsPath(p->studentsDir);
@@ -373,9 +368,9 @@ void validateIOFile(struct Paths* p, char* ioPath){
         if(xChdir(p->confDir)==0){
             if(isFileAndAccsessible(ioPath)<0){
                 if(strcmp(ioPath,p->inputPath)==0){
-                    printf("Input file not exist\n");
+                    xWrite(STDOUT_FILENO, "Input file not exist\n");
                 } else {
-                    printf("Output file not exist\n");
+                    xWrite(STDOUT_FILENO, "Output file not exist\n");
                 } 
                 exit(-1);
             }
@@ -431,7 +426,7 @@ void getPaths(struct Paths* p, char* confPath) {
 
 int main(int argc, char **argv) {
     if(!isCorrectNumOfArgs(argc-1)){
-        printf("wrong number of inputs\n");
+        xWrite(STDOUT_FILENO,"Invalid number of arguments\n"); 
         exit(-1);
     }
 
