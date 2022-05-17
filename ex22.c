@@ -302,9 +302,8 @@ void addGradeToResultsFile(struct Student *s, struct Paths* p){
    int fd = open(p->resultsFile,O_CREAT | O_APPEND | O_WRONLY ,0777);  
    char buf[sizeof(s->name)+sizeof(s->grade)+sizeof(s->comment)];
    sprintf(buf,"%s,%d,%s\n",s->name,s->grade,s->comment);
-
    xWrite(fd,buf,strlen(buf));
-          
+   xClose(fd);
 }
 
 void getAbsPath(char* path){
