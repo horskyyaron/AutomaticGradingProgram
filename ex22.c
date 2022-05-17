@@ -184,9 +184,9 @@ int runStudentProgram(struct Paths* p){
         dup2(inputFd,STDIN_FILENO);
         dup2(outputFd,STDOUT_FILENO);
         dup2(errorFd,STDERR_FILENO);
-        close(inputFd);
-        close(outputFd);
-        close(errorFd);
+        xClose(inputFd);
+        xClose(outputFd);
+        xClose(errorFd);
         execvp(argv[0],argv);
         exit(-1);
     }
