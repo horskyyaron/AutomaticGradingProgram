@@ -1,3 +1,4 @@
+// Yaron Horsky 204351670
 #include <stdio.h>
 #include <fcntl.h>
 #include <sys/types.h>
@@ -137,12 +138,13 @@ int compileCFile(char *dir, char* fileName, struct Paths* p){
     strcat(cFilePath, fileName);
 
     //building the exec command arguments.
-    char *argv[5];
+    char *argv[6];
     argv[0] = "gcc";
-    argv[1] = cFilePath; 
-    argv[2] = "-o";
-    argv[3] = p->studentExec;
-    argv[4] = NULL;
+    argv[1] = "-std=c99";
+    argv[2] = cFilePath; 
+    argv[3] = "-o";
+    argv[4] = p->studentExec;
+    argv[5] = NULL;
 
     //compiling in the child process.
     int pid = (int) fork();
@@ -169,6 +171,7 @@ int runStudentProgram(struct Paths* p){
     char *argv[2];
     argv[0] = p->studentExec;
     argv[1] = NULL;
+    
 
     //running student's program.
     int pid = (int) fork();
@@ -397,7 +400,8 @@ void getConfFileAndDirPaths(struct Paths* p, char* confPath) {
     char buf[100];
     // handling case where the conf argumnet comes as 'conf.txt' with no './' at the beginning.
     int hasSlash = 0;
-    for(int i =0; i<strlen(confPath);i++){
+    int i = 0;
+    for(; i<strlen(confPath);i++){
         if(confPath[i]=='/'){
             hasSlash=1;
             break;

@@ -1,13 +1,14 @@
+// Yaron Horsky 204351670
 #include <stdio.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <string.h>
 
 
 int isCorrectNumOfArgs(int numOfArgs) {
     if(numOfArgs != 2) {
-        printf("wrong num of args, you enetered %d/2 args.\n", numOfArgs);
         return 0;
     }
     return 1;
@@ -30,7 +31,8 @@ int xOpen(const char* p, int flags) {
 
 int xRead(int fd,int prevReadCount, char*buf){
     int bytesRead = prevReadCount;
-    for(int i=0; i<2; i++){
+    int i=0;
+    for(; i<2; i++){
         if(bytesRead) {
             bytesRead = read(fd,buf,sizeof(char));
             if(bytesRead < 0) {
@@ -147,10 +149,21 @@ int getFilesRatio(const char* p1, const char* p2) {
 
 }
 
+void printArgumentsErrorMsg() {
+    char *msg = "Wrong number of args\n";
+    if(write(STDOUT_FILENO,msg,strlen(msg))<0) {
+        perror("Error in: write");
+        exit(-1);
+    }
+}
+
 int main(int argc, char** argv) {
     int res=-1;
     if(isCorrectNumOfArgs(argc-1)){
         res = getFilesRatio(argv[1],argv[2]);
+    } else {
+        printArgumentsErrorMsg();
     }
+
     return res;
 }
